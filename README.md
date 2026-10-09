@@ -42,7 +42,7 @@ sudo bash <(curl -fsSL https://raw.githubusercontent.com/Gorta/install-selfsteal
 
 ## Пример конфига ноды
 
-[`examples/node-config.example.json`](examples/node-config.example.json) — пример Xray-конфига инбаунда VLESS Reality, который использует нода. Файл для понимания структуры, так-же можно скопировать к себе в профили Remnawave.
+[`examples/node-config.example.json`](examples/node-config.example.json) — пример Xray-конфига инбаунда VLESS Reality, который использует нода. Файл для понимания структуры, также можно скопировать к себе в профили Remnawave.
 
 ## Сайты-заглушки
 

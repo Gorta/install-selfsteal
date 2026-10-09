@@ -29,8 +29,7 @@
 ## Использование
 
 ```bash
-chmod +x install-selfsteal.sh
-sudo ./install-selfsteal.sh
+bash <(curl -fsSL https://raw.githubusercontent.com/Gorta/install-selfsteal/main/install-selfsteal.sh)
 ```
 
 Скрипт спросит:

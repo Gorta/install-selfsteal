@@ -29,7 +29,7 @@
 ## Использование
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/Gorta/install-selfsteal/main/install-selfsteal.sh)
+sudo bash <(curl -fsSL https://raw.githubusercontent.com/Gorta/install-selfsteal/main/install-selfsteal.sh)
 ```
 
 Скрипт спросит:

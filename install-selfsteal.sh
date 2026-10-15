@@ -1,7 +1,7 @@
 #!/bin/bash
 # SELFSTEAL Setup Script
 # VLESS Reality (self-steal) за Caddy с нативным automatic HTTPS (без отдельного acme.sh)
-# Version: 2.1
+# Version: 2.5
 set -e
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; GRAY='\033[0;90m'; NC='\033[0m'
@@ -10,7 +10,7 @@ warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
 error() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 step()  { echo -e "\n${CYAN}▶ $1${NC}"; }
 
-SCRIPT_VERSION="2.1"
+SCRIPT_VERSION="2.5"
 
 # ─── Баннер ───────────────────────────────────────────────────────────────────
 clear
@@ -35,8 +35,8 @@ echo ""
 # ─── Зависимости ──────────────────────────────────────────────────────────────
 step "Установка зависимостей"
 apt-get update -qq >/dev/null 2>&1
-apt-get install -y -qq unzip dnsutils curl coreutils >/dev/null 2>&1
-info "unzip, dnsutils, curl, coreutils — готово"
+apt-get install -y -qq unzip dnsutils curl coreutils fail2ban >/dev/null 2>&1
+info "unzip, dnsutils, curl, coreutils, fail2ban — готово"
 
 # ─── Шаг 1: Основные параметры ────────────────────────────────────────────────
 step "Основные параметры"
@@ -48,13 +48,15 @@ while true; do
 done
 
 while true; do
-    read -rp "  Email для Let's Encrypt: " EMAIL
+    read -rp "  Email для Let's Encrypt (Enter — пропустить): " EMAIL
+    [[ -z "$EMAIL" ]] && { warn "Email пропущен — ACME-аккаунт будет анонимным"; break; }
     [[ "$EMAIL" == *@* ]] && break
     echo -e "  ${RED}Некорректный email${NC}"
 done
 
 while true; do
-    read -rp "  IP панели Remnawave (для фаервола): " PANEL_IP
+    read -rp "  IP панели Remnawave, для фаервола (Enter — пропустить): " PANEL_IP
+    [[ -z "$PANEL_IP" ]] && { warn "IP панели пропущен — порт ноды будет открыт всем без ограничения по IP"; break; }
     [[ "$PANEL_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && break
     echo -e "  ${RED}Некорректный IPv4${NC}"
 done
@@ -103,8 +105,8 @@ fi
 echo ""
 echo -e "  ${CYAN}Параметры установки:${NC}"
 echo -e "  ${GRAY}Домен:     ${NC}$DOMAIN"
-echo -e "  ${GRAY}Email:     ${NC}$EMAIL"
-echo -e "  ${GRAY}Panel IP:  ${NC}$PANEL_IP"
+echo -e "  ${GRAY}Email:     ${NC}${EMAIL:-"— пропущен"}"
+echo -e "  ${GRAY}Panel IP:  ${NC}${PANEL_IP:-"— пропущен"}"
 echo -e "  ${GRAY}NODE_PORT: ${NC}$NODE_PORT"
 echo ""
 read -rp "  Начать установку? [y/N]: " CONFIRM
@@ -207,14 +209,18 @@ step "Генерация конфигов"
 
 # Caddy сам получает и продлевает сертификат (native automatic HTTPS).
 # Caddy не слушает 443 — этот порт целиком принадлежит Xray (Reality),
-# который форвардит нераспознанный (decoy) трафик на 127.0.0.1:9443.
+# который форвардит весь неопознанный трафик (не прошедший Reality-аутентификацию)
+# на 127.0.0.1:9443, где его встречает сайт-заглушка.
 #
 # listener_wrappers привязаны строго к адресу 127.0.0.1:9443: без явного
 # адреса эти настройки применились бы ко всем серверам Caddy, включая :80,
 # и сломали бы обычный (plain HTTP) ACME-челлендж на этом порту.
+EMAIL_LINE=""
+[[ -n "$EMAIL" ]] && EMAIL_LINE="    email ${EMAIL}"
+
 cat > /opt/selfsteal/Caddyfile <<EOF
 {
-    email ${EMAIL}
+${EMAIL_LINE}
     servers 127.0.0.1:9443 {
         listener_wrappers {
             proxy_protocol {
@@ -227,12 +233,16 @@ cat > /opt/selfsteal/Caddyfile <<EOF
 
 ${DOMAIN}:9443 {
     bind 127.0.0.1
+    tls {
+        protocols tls1.2 tls1.3
+    }
     root * /var/www/html
     try_files {path} /index.html
     file_server
     header {
         -Server
         -X-Powered-By
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
     }
 }
 
@@ -293,15 +303,52 @@ if command -v ufw &>/dev/null; then
     ufw --force reset          >/dev/null 2>&1
     ufw default deny incoming  >/dev/null 2>&1
     ufw default allow outgoing >/dev/null 2>&1
-    ufw allow ssh              >/dev/null 2>&1
+    ufw limit ssh              >/dev/null 2>&1
     ufw allow 80/tcp           >/dev/null 2>&1
     ufw allow 443/tcp          >/dev/null 2>&1
-    ufw allow from "$PANEL_IP" to any port "$NODE_PORT" proto tcp >/dev/null 2>&1
+
+    if [[ -n "$PANEL_IP" ]]; then
+        ufw allow from "$PANEL_IP" to any port "$NODE_PORT" proto tcp >/dev/null 2>&1
+    else
+        ufw allow "$NODE_PORT"/tcp >/dev/null 2>&1
+        warn "IP панели не указан — порт ${NODE_PORT} открыт всем (рекомендуется ограничить по IP панели, когда он известен)"
+    fi
+
     ufw --force enable         >/dev/null 2>&1
     info "ufw настроен"
 else
     warn "ufw не найден, пропускаю"
 fi
+
+# ─── Swap ─────────────────────────────────────────────────────────────────────
+step "Настройка swap"
+if swapon --show | grep -q .; then
+    info "Swap уже настроен, пропускаю"
+elif [[ -f /swapfile ]]; then
+    info "/swapfile уже существует, пропускаю создание"
+else
+    fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+    chmod 600 /swapfile
+    mkswap /swapfile >/dev/null
+    swapon /swapfile
+    grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    info "Добавлено 2 ГБ swap (/swapfile)"
+fi
+
+# ─── fail2ban ─────────────────────────────────────────────────────────────────
+step "Настройка fail2ban"
+cat > /etc/fail2ban/jail.local <<'EOF'
+[sshd]
+enabled = true
+port    = ssh
+backend = systemd
+bantime  = 3600
+findtime = 600
+maxretry = 5
+EOF
+systemctl enable --now fail2ban >/dev/null 2>&1
+systemctl restart fail2ban >/dev/null 2>&1
+info "fail2ban настроен (sshd: 5 попыток / 10 мин → бан на 1 час)"
 
 # ─── BBR ──────────────────────────────────────────────────────────────────────
 step "Оптимизация сети (BBR)"

@@ -32,6 +32,42 @@
           "serverNames": ["your-node-domain.example.com"]
         }
       }
+    },
+    {
+      "tag": "HYSTERIA2_SELF_STEAL",
+      "port": 443,
+      "listen": "0.0.0.0",
+      "protocol": "hysteria",
+      "settings": {
+        "version": 2,
+        "users": []
+      },
+      "streamSettings": {
+        "network": "hysteria",
+        "security": "tls",
+        "tlsSettings": {
+          "alpn": ["h3"],
+          "serverName": "your-node-domain.example.com",
+          "certificates": [
+            {
+              "certificateFile": "/var/lib/remnawave/configs/xray/ssl/fullchain.pem",
+              "keyFile": "/var/lib/remnawave/configs/xray/ssl/privkey.key"
+            }
+          ]
+        },
+        "hysteriaSettings": {
+          "version": 2,
+          "udpIdleTimeout": 60
+        },
+        "finalmask": {
+          "quicParams": {
+            "congestion": "bbr",
+            "maxIdleTimeout": 90,
+            "keepAlivePeriod": 10,
+            "disablePathMTUDiscovery": false
+          }
+        }
+      }
     }
   ],
   "outbounds": [

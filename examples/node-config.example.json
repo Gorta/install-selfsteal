@@ -42,12 +42,19 @@
         "version": 2,
         "users": []
       },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ]
+      },
       "streamSettings": {
         "network": "hysteria",
         "security": "tls",
         "tlsSettings": {
           "alpn": ["h3"],
-          "serverName": "your-node-domain.example.com",
           "certificates": [
             {
               "certificateFile": "/var/lib/remnawave/configs/xray/ssl/fullchain.pem",
@@ -57,9 +64,23 @@
         },
         "hysteriaSettings": {
           "version": 2,
-          "udpIdleTimeout": 60
+          "udpIdleTimeout": 60,
+          "masquerade": {
+            "type": "proxy",
+            "url": "https://127.0.0.1:9443",
+            "rewriteHost": true,
+            "insecure": true
+          }
         },
         "finalmask": {
+          "udp": [
+            {
+              "type": "salamander",
+              "settings": {
+                "password": "REPLACE_WITH_SALAMANDER_PASSWORD"
+              }
+            }
+          ],
           "quicParams": {
             "congestion": "bbr",
             "maxIdleTimeout": 90,

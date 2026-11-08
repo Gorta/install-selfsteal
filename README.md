@@ -36,7 +36,7 @@
 ## Использование
 
 ```
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/Gorta/install-selfsteal/main/install-selfsteal.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/Gorta/install-selfsteal/main/install-selfsteal.sh)
 ```
 
 Скрипт сам определяет, что делать — на чистом сервере или на уже настроенной ноде — см. ниже.
